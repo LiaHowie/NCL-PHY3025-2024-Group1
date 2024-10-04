@@ -37,6 +37,30 @@ def lin_lstsq(x,y):
     b = np.mean(y) - a*np.mean(x)
     return [a,b]
 
+def nonlinpoly_lstsq(x,y,m):
+    # Function for a non-linear polynomial least square fit -- Lia
+    # maths provided by Jason
+    x = np.array(x)
+    y = np.array(y)
+    A = np.zeros((m+1,m+1))
+    for i in range(0,m+1):   
+        for j in range(0,m+1):
+            A[i][j] = np.sum(x**(m-(m-j)+i))
+    A_i = np.linalg.inv(A)
+    
+    v = np.zeros(m+1)
+    for i in range(0,m+1):
+        v[i] = np.sum(y* x**i)
+    
+    a = np.matmul(A_i,v)
+    """ a = []
+    for i in range(0,m+1):
+        temp = []
+        for j in range(0,m+1):
+            temp.append(A_i[i][j]*v[j])
+        temp_sum = round(np.sum(temp),5)
+        a.append(temp_sum) """
+    return a
 
 
 
@@ -48,7 +72,45 @@ def lin_lstsq(x,y):
 
 
 
-# Test Data:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#%%
+# Test Functions
+x = np.linspace(1,4,1000)
+#y = [1,8,27,64,125,216,343,512]
+y = 2*x**3 -17*x**2 + 47*x -42
+#y = 5*x**2 - 6*x + 1
+m = 3
+
+print(nonlinpoly_lstsq(x,y,m))
+
+plt.figure()
+plt.scatter(x,y)
+
+fit = nonlinpoly_lstsq(x,y,m)
+
+#fitx = np.linspace(np.min(x),np.max(x))
+fitx = x
+fity = fit[0] + fit[1]*fitx + fit[2]*fitx**2 + fit[3]*fitx**3
+plt.plot(fitx,fity,color="red")
+
+
 data = []
 for i in range(1,6):
     data.append(i)
@@ -59,11 +121,7 @@ y = data*2
 """ x = np.array([2,3,3,3,4,4,5,5,5,6])
 y = np.array([28.7,24.8,26.0,30.5,23.8,24.6,23.8,20.4,21.6,22.1]) """
 fit = lin_lstsq(x,y)
-print(np.sum(x))
-print(np.sum(y))
-print(np.sum(x**2))
-print(np.sum(y**2))
-print(np.sum(x*y))
+
 
 print(fit)
 
