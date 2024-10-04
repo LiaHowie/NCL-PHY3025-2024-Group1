@@ -92,7 +92,9 @@ def nonlinpoly_lstsq(x,y,m):
 
 #%%
 # Test Functions
-x = np.linspace(1,4,1000)
+
+# Non-linear fit
+x = np.linspace(1,4,50)
 #y = [1,8,27,64,125,216,343,512]
 y = 2*x**3 -17*x**2 + 47*x -42
 #y = 5*x**2 - 6*x + 1
@@ -100,17 +102,25 @@ m = 3
 
 print(nonlinpoly_lstsq(x,y,m))
 
-plt.figure()
-plt.scatter(x,y)
+
+fig, ax = plt.subplots() #set up figure
+
+ax.grid(color='lightgrey', linestyle='--', linewidth=0.5,alpha=0.6)
+
+ax.scatter(x, y, color="slategrey",marker='x', label="Test Data")
 
 fit = nonlinpoly_lstsq(x,y,m)
 
 #fitx = np.linspace(np.min(x),np.max(x))
 fitx = x
 fity = fit[0] + fit[1]*fitx + fit[2]*fitx**2 + fit[3]*fitx**3
-plt.plot(fitx,fity,color="red")
+ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("Non-linear Polynomial Fit test using $y = 2x^3 - 17x^2 + 47x - 42$")
+plt.legend()
 
-
+# Linear Fit
 data = []
 for i in range(1,6):
     data.append(i)
@@ -125,11 +135,16 @@ fit = lin_lstsq(x,y)
 
 print(fit)
 
-plt.figure()
-plt.scatter(x,y)
+fig, ax = plt.subplots() #set up figure
+ax.scatter(x, y, color="slategrey",marker='x', label="Test Data")
 
 fitx = np.linspace(0,np.max(x))
 fity = fit[0]*fitx + fit[1]
-plt.plot(fitx,fity)
+ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("Linear Fit test using $y = 2x$")
+plt.legend()
 
 plt.show()
