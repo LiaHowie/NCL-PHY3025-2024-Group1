@@ -42,19 +42,22 @@ def nonlinpoly_lstsq(x,y,m):
     # maths provided by Jason
     x = np.array(x)
     y = np.array(y)
-    A = np.zeros((m+1,m+1))
+    A = np.zeros((m+1,m+1)) # Create an mxm matrix of 0s
     for i in range(0,m+1):   
+        # Fill the mxm matrix with the appropriate values
         for j in range(0,m+1):
             A[i][j] = np.sum(x**(m-(m-j)+i))
-    A_i = np.linalg.inv(A)
+    A_i = np.linalg.inv(A) # Invert the matrix for use in calculation
     
-    v = np.zeros(m+1)
+    v = np.zeros(m+1) # create an m-dimensional vector of 0s
     for i in range(0,m+1):
+        # Fill the vector with appropriate values
         v[i] = np.sum(y* x**i)
     
-    a = np.matmul(A_i,v)
+    a = np.matmul(A_i,v) # Matrix Multiplication of the Inverse mxm Matrix and the m-dimensional vector
     """ a = []
     for i in range(0,m+1):
+        # Matrix Multiplication of the Inverse mxm Matrix and the m-dimensional vector
         temp = []
         for j in range(0,m+1):
             temp.append(A_i[i][j]*v[j])
