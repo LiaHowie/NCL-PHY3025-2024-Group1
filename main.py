@@ -9,9 +9,12 @@ df_xray = pd.read_csv("SWIFT X-Ray Catalogue.csv", delimiter="|", skiprows=1)
 'BAT_NAME', 'RA', 'DEC', 'SNR', 'COUNTERPART_NAME', 'OTHER_NAME', 'CTPT_RA', 'CTPT_DEC', 'FLUX', 'FLUX_LO',
 'FLUX_HI', 'CONTA', 'GAMMA', 'GAMM_LO', 'GAMM_HI', 'CHI_SQ_R', 'REDSHIFT', 'LUM', 'ASSOC_STREN', 'CL2', 'TYPE'
 """
+df_xray_agn = df_xray[df_xray['TYPE'].str.contains("AGN")] # Filter out non-AGN sources
+
 print(df_xray)
 print(df_xray.loc[1, 'RA'])
 print(df_xray['RA'])
+
 
 # Open Infrared dataset
 df_ir = pd.read_csv("table_irsa_catalog_search_results.csv", delimiter=",", skiprows=0)
