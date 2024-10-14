@@ -34,8 +34,6 @@ idx, sep2d, dist3d = coord.match_coordinates_sky(xray_agn_coords, ir_coords)
 df_ir_agn = df_ir.iloc[idx,:]
 # reset the indices of the infrared agn dataset so that they start from 0 and count up. This is needed as the previous step jumbles up the indices
 df_ir_agn = df_ir_agn.reset_index(drop=True)
-# Converting the coordinates of this new dataframe
-ir_agn_coords = coord.SkyCoord(ra=df_ir_agn['ra']*u.deg, dec=df_ir_agn['dec']*u.deg, unit=u.deg, equinox="B1950")
 
 # set a tolerance value for angular separation of matching objects, this will filter out any none-matching objects.
 # this step is important as the astropy matching above only finds the closest object across the two datasets
