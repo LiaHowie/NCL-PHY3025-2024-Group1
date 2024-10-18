@@ -1,3 +1,6 @@
+# Dataset processing -- Lia
+# Combining the SWIFT BAT dataset and IRAS dataset by filtering out non-AGN sources in SWIFT BAT,
+# then coressmatching RA and DEC values with the IRAS dataset
 import pandas as pd
 from astropy import coordinates as coord
 from astropy import units as u
@@ -10,6 +13,7 @@ df_xray = pd.read_csv("SWIFT X-Ray Catalogue.csv", delimiter="|", skiprows=1)
 """
 # Filter out non-AGN sources by searching for strings "AGN" and "Sy"
 df_xray_agn = pd.DataFrame(df_xray[df_xray['TYPE'].str.contains("AGN|Sy")]) 
+# Reset the indices so it goes from 0 onwards
 df_xray_agn = df_xray_agn.reset_index(drop=True)
 # Convert X-Ray AGN RA and DEC coordinates to a common system
 xray_agn_coords = coord.SkyCoord(ra=df_xray_agn['RA']*u.deg, dec=df_xray_agn['DEC']*u.deg, unit=u.deg, equinox="J2000")
