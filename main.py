@@ -1,11 +1,15 @@
 # Main code for data analysis -- Lia
 import pandas as pd
 import numpy as np
+import scienceplots
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from astropy import coordinates as coord
 from astropy import units as u
 import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
+
+L_sol = 3.846* 1e26
 
 def lin_lstsq(x,y):
     # Function for a linear least square fit
@@ -45,116 +49,67 @@ def nonlinpoly_lstsq(x,y,m):
 
 
 def lum(f,d):
+    # Luminosity formula
     return f*4*np.pi*(d**2)
 
 def SFR(L):
-    return (L*1e7)/(2.2*10**(43))
+    # Star formation rate formula (Kennicutt 1998)
+    return (L)/(5.8*10**(9) *(L_sol))
 
 # Open compiled dataset created in dataset_processing.py as a pandas dataframe
 df = pd.read_csv("Compiled_AGN_dataset.csv",sep=",",index_col=0)
+# Remove any rows that have NaN in columns of interest
+df.dropna(subset=['XRAY:REDSHIFT'],inplace=True)
+df.dropna(subset=['IR:FNU_12'],inplace=True)
+df.dropna(subset=['XRAY:LUM'],inplace=True)
 
+# Calculate distance to galaxies using redshift
 z = df['XRAY:REDSHIFT'].to_numpy() * cu.redshift
 d = z.to(u.meter, cu.redshift_distance(WMAP9, kind="comoving"))
 
-lum_fir = lum(df['IR:FQUAL_12'],d)
+# Using the distance, now find the IR luminosity (converting from Jy to W m^-2 Hz^-1 first)
+lum_fir = lum(df['IR:FNU_12']*1e-26,d)
+# Converting luminosity to units of L_sol
+lum_fir = lum_fir / L_sol
+
+# Calaculate Star Formation Rates in units of M_sol per year
 sfr = SFR(lum_fir)
-lum_xray = ((10**df['XRAY:LUM']) * 1e-7)/(3.828* 10**(26))
 
-fig, ax = plt.subplots() #set up figure
+# Converting luminosity to units of L_sol
+lum_xray = (10**df['XRAY:LUM'])/ L_sol
 
-ax.grid(color='lightgrey', linestyle='--', linewidth=0.5,alpha=0.6)
+""" # Remove outliers
+outlier = list(lum_xray).index(np.max(lum_xray))
+del sfr[outlier]
+del lum_xray[outlier] """
 
-ax.scatter(lum_xray, sfr, color="slategrey",marker='x', label="Data")
-
-fit = lin_lstsq((lum_xray),(sfr))
-fitx = np.geomspace(np.min(lum_xray),np.max(lum_xray),10000)
+# Run linear least square algorithm on the base 10 log of the SFR and luminosity
+fit = lin_lstsq(np.log10(lum_xray),np.log10(sfr))
+# Create a best fit line using the linear least square output
+fitx = np.geomspace(np.min(np.log10(lum_xray)),np.max(np.log10(lum_xray)),10000)
 fity = fit[0]*fitx + fit[1]
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
 
-plt.xlabel("AGN Luminosity $L_{\odot}$")
-plt.ylabel("SFR M$_{\odot}\cdot$yr$^{-1}$")
-plt.loglog()
-plt.title("")
+
+
+#%%
+# Plot graph:
+mpl.rcParams['lines.markersize'] = 5
+mpl.style.use(['science','grid'])
+mpl.rcParams['figure.figsize'] = (8,7)
+mpl.rcParams['font.size'] = 14
+
+plt.figure()
+
+#ax.grid(color='lightgrey', linestyle='--', linewidth=0.5,alpha=0.6)
+
+plt.scatter(np.log10(lum_xray), np.log10(sfr), color="slategrey", marker='x', label="Data")
+
+plt.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+
+plt.xlabel("$\log($AGN Luminosity, $L_{\odot})$")
+plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
+#plt.xlim(np.min(lum_xray),1.5e11)
+#plt.ylim(0,2e15)
 plt.legend()
 
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-""" #%%
-# Test Functions
-
-# Non-linear fit
-x = np.linspace(1,4,50)
-#y = [1,8,27,64,125,216,343,512]
-y = 2*x**3 -17*x**2 + 47*x -42
-#y = 5*x**2 - 6*x + 1
-m = 3
-
-print(nonlinpoly_lstsq(x,y,m))
-
-
-fig, ax = plt.subplots() #set up figure
-
-ax.grid(color='lightgrey', linestyle='--', linewidth=0.5,alpha=0.6)
-
-ax.scatter(x, y, color="slategrey",marker='x', label="Test Data")
-
-fit = nonlinpoly_lstsq(x,y,m)
-
-#fitx = np.linspace(np.min(x),np.max(x))
-fitx = x
-fity = fit[0] + fit[1]*fitx + fit[2]*fitx**2 + fit[3]*fitx**3
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
-plt.xlabel("x")
-plt.ylabel("y")
-plt.title("Non-linear Polynomial Fit test using $y = 2x^3 - 17x^2 + 47x - 42$")
-plt.legend()
-
-# Linear Fit
-data = []
-for i in range(1,6):
-    data.append(i)
-data = np.array(data,dtype="float64")
-x = data
-y = data*2 """
-
-""" x = np.array([2,3,3,3,4,4,5,5,5,6])
-y = np.array([28.7,24.8,26.0,30.5,23.8,24.6,23.8,20.4,21.6,22.1]) """
-""" fit = lin_lstsq(x,y)
-
-
-print(fit)
-
-fig, ax = plt.subplots() #set up figure
-ax.scatter(x, y, color="slategrey",marker='x', label="Test Data")
-
-fitx = np.linspace(0,np.max(x))
-fity = fit[0]*fitx + fit[1]
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
-
-plt.xlabel("x")
-plt.ylabel("y")
-plt.title("Linear Fit test using $y = 2x$")
-plt.legend()
-
-plt.show() """
