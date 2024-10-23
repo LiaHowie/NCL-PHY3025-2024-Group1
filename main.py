@@ -50,18 +50,18 @@ def nonlinpoly_lstsq(x,y,m):
 
 def lum(f,d):
     # Luminosity formula
-    return f*4*np.pi*(d**2)
+    return np.array(f*4*np.pi*(d**2))
 
 def SFR(L):
     # Star formation rate formula (Kennicutt 1998)
-    return (L)/(5.8*10**(9) *(L_sol))
+    return np.array((L)/(5.8*10**(9) *(L_sol)))
 
 # Open compiled dataset created in dataset_processing.py as a pandas dataframe
 df = pd.read_csv("Compiled_AGN_dataset.csv",sep=",",index_col=0)
 # Remove any rows that have NaN in columns of interest
 df.dropna(subset=['XRAY:REDSHIFT'],inplace=True)
 df.dropna(subset=['IR:FNU_12'],inplace=True)
-df.dropna(subset=['XRAY:LUM'],inplace=True)
+df.dropna(subset=['XRAY:FLUX'],inplace=True)
 
 # Calculate distance to galaxies using redshift
 z = df['XRAY:REDSHIFT'].to_numpy() * cu.redshift
@@ -75,8 +75,8 @@ lum_fir = lum_fir / L_sol
 # Calaculate Star Formation Rates in units of M_sol per year
 sfr = SFR(lum_fir)
 
-# Converting luminosity to units of L_sol
-lum_xray = (10**df['XRAY:LUM'])/ L_sol
+# Calculate AGN galaxy luminosity in units of L_sol
+lum_xray = lum(df['XRAY:FLUX'] * 1e-7 *1e-12, d) / L_sol
 
 """ # Remove outliers
 outlier = list(lum_xray).index(np.max(lum_xray))
@@ -89,6 +89,7 @@ fit = lin_lstsq(np.log10(lum_xray),np.log10(sfr))
 fitx = np.geomspace(np.min(np.log10(lum_xray)),np.max(np.log10(lum_xray)),10000)
 fity = fit[0]*fitx + fit[1]
 
+print(f"log(SFR) = {fit[0]}log(L_agn) + {fit[1]}")
 
 
 #%%
@@ -98,18 +99,60 @@ mpl.style.use(['science','grid'])
 mpl.rcParams['figure.figsize'] = (8,7)
 mpl.rcParams['font.size'] = 14
 
-plt.figure()
+clrs = mpl.colors.LinearSegmentedColormap.from_list("custom", ["orange","red","firebrick"])
 
-#ax.grid(color='lightgrey', linestyle='--', linewidth=0.5,alpha=0.6)
+fig, ax = plt.subplots()
+#scatter = ax.scatter(np.log10(lum_xray), np.log10(sfr), marker='x', label="Data", c=np.log10(z), cmap=clrs)
+scatter = ax.scatter(np.log10(lum_xray), np.log10(sfr), marker='x', label="Data", c=z, cmap=clrs)
 
-plt.scatter(np.log10(lum_xray), np.log10(sfr), color="slategrey", marker='x', label="Data")
+clrbar = plt.colorbar(scatter)
+#clrbar.set_label("$\log($Redshift$)$")
+clrbar.set_label("Redshift")
 
-plt.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
 
 plt.xlabel("$\log($AGN Luminosity, $L_{\odot})$")
 plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
-#plt.xlim(np.min(lum_xray),1.5e11)
-#plt.ylim(0,2e15)
 plt.legend()
+
+
+
+#%%
+fig, ax = plt.subplots()
+scatter = ax.scatter(np.log10(z), np.log10(lum_xray), marker='x', label="Data", c=np.log10(sfr), cmap="viridis")
+
+clrbar = plt.colorbar(scatter)
+clrbar.set_label("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
+
+fit = lin_lstsq(np.log10(z), np.log10(lum_xray))
+fitx = np.linspace(min(np.log10(z)),max(np.log10(z)),1000000)
+fity = fit[0]*fitx + fit[1]
+print(f"log(L_agn) = {fit[0]}log(z) + {fit[1]}")
+
+ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+
+plt.xlabel("$\log($Redshift$)$")
+plt.ylabel("$\log($AGN Luminosity, $L_{\odot})$")
+plt.legend(loc="lower right")
+
+
+
+#%%
+fig, ax = plt.subplots()
+scatter = ax.scatter(np.log10(z), np.log10(sfr), marker='x', label="Data", c=np.log10(lum_xray), cmap="viridis")
+
+clrbar = plt.colorbar(scatter)
+clrbar.set_label("$\log($AGN Luminosity, $L_{\odot})$")
+
+fit = lin_lstsq(np.log10(z), np.log10(sfr))
+fitx = np.linspace(min(np.log10(z)),max(np.log10(z)),1000000)
+fity = fit[0]*fitx + fit[1]
+print(f"log(SFR) = {fit[0]}log(z) + {fit[1]}")
+
+ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+
+plt.xlabel("$\log($Redshift$)$")
+plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
+plt.legend(loc="lower right")
 
 plt.show()
