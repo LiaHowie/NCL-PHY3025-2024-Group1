@@ -9,7 +9,8 @@ from astropy import units as u
 import astropy.cosmology.units as cu
 from astropy.cosmology import WMAP9
 
-L_sol = 3.846* 1e26
+#%%
+# Defining functions
 
 def lin_lstsq(x,y):
     # Function for a linear least square fit
@@ -17,6 +18,7 @@ def lin_lstsq(x,y):
     N = len(x)
     a = (np.sum(x*y)-(1/N)*np.sum(x)*np.sum(y))/(np.sum(x**2)-(1/N)*(np.sum(x)**2))
     b = np.mean(y) - a*np.mean(x)
+    # where y = a*x + b
     return [a,b]
 
 def nonlinpoly_lstsq(x,y,m):
@@ -45,7 +47,14 @@ def nonlinpoly_lstsq(x,y,m):
             temp.append(A_i[i][j]*v[j])
         temp_sum = round(np.sum(temp),5)
         a.append(temp_sum)
+    # where y = a[m]*x**m + a[m-1]*x**(m-1) + ... + a[1]*x + a[0]
     return a
+
+def sim_solve_3d(a,b,c,d,e,f):
+    a1 = (1/(e - a*c))
+    a2 = (-a/(e - a*c))
+    a3 =(a*d - f)/(e - a*c) 
+    return [a1,a2,a3]
 
 
 def lum(f,d):
@@ -53,106 +62,193 @@ def lum(f,d):
     return np.array(f*4*np.pi*(d**2))
 
 def SFR(L):
-    # Star formation rate formula (Kennicutt 1998)
-    return np.array((L)/(5.8*10**(9) *(L_sol)))
+    # Star formation rate formula, requiring luminosity in erg s^-1 (Kennicutt, 1998 [pg 13 (202)])
+    return np.array((4.5*1e-44)*L)
+
+
+
+#%%
+# Processing data so it is analysis ready
 
 # Open compiled dataset created in dataset_processing.py as a pandas dataframe
 df = pd.read_csv("Compiled_AGN_dataset.csv",sep=",",index_col=0)
 # Remove any rows that have NaN in columns of interest
 df.dropna(subset=['XRAY:REDSHIFT'],inplace=True)
-df.dropna(subset=['IR:FNU_12'],inplace=True)
+df.dropna(subset=['IR:FNU_100'],inplace=True)
+df.dropna(subset=['IR:FNU_60'],inplace=True)
 df.dropna(subset=['XRAY:FLUX'],inplace=True)
 
-# Calculate distance to galaxies using redshift
+# Remove redshifts below 0.05 to avoid K-corrections
+df.drop(df[df['XRAY:REDSHIFT'] > 0.05].index, inplace=True)
+
+# Calculate distance (in metres) to galaxies using redshift
 z = df['XRAY:REDSHIFT'].to_numpy() * cu.redshift
-d = z.to(u.meter, cu.redshift_distance(WMAP9, kind="comoving"))
+d = z.to(u.centimeter, cu.redshift_distance(WMAP9, kind="comoving"))
 
-# Using the distance, now find the IR luminosity (converting from Jy to W m^-2 Hz^-1 first)
-lum_fir = lum(df['IR:FNU_12']*1e-26,d)
-# Converting luminosity to units of L_sol
-lum_fir = lum_fir / L_sol
-
+# Converting from specific (nominal) fluxes [Jy] to normal flux [W m^-2] (Helou, 1988 [pg 21 (171)])
+f100 = df['IR:FNU_100']*(1.00*10**(-14))
+f60 = df['IR:FNU_60']*(2.58*10**(-14))
+# Calculate total FIR flux (Helou, 1988 [pg 19 (169)])
+FIR = 2.16*(f100 + f60)
+# Convert flux from W m^-2 to erg s^-1 cm^-2 (1 W = 10^7 erg s^-1, 1m^2 = 10^4 cm^2)
+FIR = FIR*1e7 * 1e-4
+# Using the distance, now find the IR luminosity
+lum_fir = lum(FIR,d)
 # Calaculate Star Formation Rates in units of M_sol per year
 sfr = SFR(lum_fir)
 
-# Calculate AGN galaxy luminosity in units of L_sol
-lum_xray = lum(df['XRAY:FLUX'] * 1e-7 *1e-12, d) / L_sol
+# Extract X-Ray flux from SWIFT BAT dataset, units of erg s^-1 cm^-2, and calculate the luminosity in erg s^-1
+lum_xray = lum(df['XRAY:FLUX'],d)
+# Defining L_sol (luminosity of the sun) in erg s^-1
+L_sol = 3.846* 1e26 *1e7
+# Putting our calculated X-Ray luminosities in terms of L_sol
+lum_xray = lum_xray/L_sol
 
-""" # Remove outliers
-outlier = list(lum_xray).index(np.max(lum_xray))
-del sfr[outlier]
-del lum_xray[outlier] """
+# Logging SFR, X-Ray luminosity, and redshift as we will frequrntly be using logged values going forward
+log_sfr = np.log10(sfr)
+log_lum_xray = np.log10(lum_xray)
+log_z = np.log10(z)
 
-# Run linear least square algorithm on the base 10 log of the SFR and luminosity
-fit = lin_lstsq(np.log10(lum_xray),np.log10(sfr))
-# Create a best fit line using the linear least square output
-fitx = np.geomspace(np.min(np.log10(lum_xray)),np.max(np.log10(lum_xray)),10000)
-fity = fit[0]*fitx + fit[1]
-
-print(f"log(SFR) = {fit[0]}log(L_agn) + {fit[1]}")
 
 
 #%%
-# Plot graph:
+# Setup Matplotlib Settings
 mpl.rcParams['lines.markersize'] = 5
 mpl.style.use(['science','grid'])
 mpl.rcParams['figure.figsize'] = (8,7)
 mpl.rcParams['font.size'] = 14
 
+# Defining custom colour gradient for redshift
 clrs = mpl.colors.LinearSegmentedColormap.from_list("custom", ["orange","red","firebrick"])
 
-fig, ax = plt.subplots()
-#scatter = ax.scatter(np.log10(lum_xray), np.log10(sfr), marker='x', label="Data", c=np.log10(z), cmap=clrs)
-scatter = ax.scatter(np.log10(lum_xray), np.log10(sfr), marker='x', label="Data", c=z, cmap=clrs)
+# Defining length of dummy arrays
+dmy_len = 1000000
 
+
+#%%
+# Create figure - log(SFR) vs log(lum_xray)
+fig, ax = plt.subplots()
+
+# Plot scatter plot of x=log(lum_xray), y=log(sfr) with redshift determining point colour
+scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", c=z, cmap=clrs)
+
+# Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
-#clrbar.set_label("$\log($Redshift$)$")
 clrbar.set_label("Redshift")
 
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+# Run linear least square algorithm on the base 10 log of the SFR and luminosity
+fit_sfr_Lagn = lin_lstsq(log_lum_xray,log_sfr)
+# Create an array of dummy x-axis values
+fitx = np.geomspace(np.min(log_lum_xray),np.max(log_lum_xray),dmy_len)
+# Calculate the the best fit line using the linear least square outputted parameters and the continuous value of x=log(lum_xray)
+fity_sfr_Lagn = fit_sfr_Lagn[0]*fitx + fit_sfr_Lagn[1]
+# Print the best fit equation to console
+print(f"log(SFR) = {fit_sfr_Lagn[0]}*log(L_agn) + {fit_sfr_Lagn[1]}")
 
-plt.xlabel("$\log($AGN Luminosity, $L_{\odot})$")
+# Plot the best fit line
+ax.plot(fitx,fity_sfr_Lagn, color='firebrick', linewidth=1, label="Fit Line")
+
+# Label axes and plot legend
+plt.xlabel("$\log($AGN X-Ray Luminosity, $L_{\odot})$")
 plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
 plt.legend()
 
 
-
 #%%
+# Create figure - log(lum_xray) vs log(z)
 fig, ax = plt.subplots()
-scatter = ax.scatter(np.log10(z), np.log10(lum_xray), marker='x', label="Data", c=np.log10(sfr), cmap="viridis")
 
+# Plot scatter plot of x=log(z), y=log(lum_xray) with log(SFR) determining point colour
+scatter = ax.scatter(log_z, log_lum_xray, marker='x', label="Data", c=log_sfr, cmap="viridis")
+
+# Plot a colourbar to show how the datapoint colour changes depending on log(SFR)
 clrbar = plt.colorbar(scatter)
 clrbar.set_label("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
 
-fit = lin_lstsq(np.log10(z), np.log10(lum_xray))
-fitx = np.linspace(min(np.log10(z)),max(np.log10(z)),1000000)
-fity = fit[0]*fitx + fit[1]
-print(f"log(L_agn) = {fit[0]}log(z) + {fit[1]}")
+# Run linear least square algorithm on the base 10 log of the luminosity and redshift
+fit_Lagn_z = lin_lstsq(log_z, log_lum_xray)
+# Create an array of dummy x-axis values
+fitx = np.linspace(min(log_z),max(log_z),dmy_len)
+# Calculate the the best fit line using the linear least square outputted parameters and the continuous value of x=log(z)
+fity_Lagn_z = fit_Lagn_z[0]*fitx + fit_Lagn_z[1]
+# Print the best fit equation to console
+print(f"log(L_agn) = {fit_Lagn_z[0]}*log(z) + {fit_Lagn_z[1]}")
 
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+# Plot the best fit line
+ax.plot(fitx,fity_Lagn_z, color='firebrick', linewidth=1, label="Fit Line")
 
+# Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
-plt.ylabel("$\log($AGN Luminosity, $L_{\odot})$")
+plt.ylabel("$\log($AGN X-Ray Luminosity, $L_{\odot})$")
 plt.legend(loc="lower right")
 
 
 
 #%%
+# Create figure - log(SFR) vs log(z)
 fig, ax = plt.subplots()
-scatter = ax.scatter(np.log10(z), np.log10(sfr), marker='x', label="Data", c=np.log10(lum_xray), cmap="viridis")
 
+# Plot scatter plot of x=log(z), y=log(SFR) with log(lum_xray) determining point colour
+scatter = ax.scatter(log_z, log_sfr, marker='x', label="Data", c=log_lum_xray, cmap="viridis")
+
+# Plot a colourbar to show how the datapoint colour changes depending on log(lum_xray)
 clrbar = plt.colorbar(scatter)
-clrbar.set_label("$\log($AGN Luminosity, $L_{\odot})$")
+clrbar.set_label("$\log($AGN X-Ray Luminosity, $L_{\odot})$")
 
-fit = lin_lstsq(np.log10(z), np.log10(sfr))
-fitx = np.linspace(min(np.log10(z)),max(np.log10(z)),1000000)
-fity = fit[0]*fitx + fit[1]
-print(f"log(SFR) = {fit[0]}log(z) + {fit[1]}")
+# Run linear least square algorithm on the base 10 log of the SFR and redshift
+fit_sfr_z = lin_lstsq(log_z, log_sfr)
+# Create an array of dummy x-axis values
+fitx = np.linspace(min(log_z),max(log_z),dmy_len)
+# Calculate the the best fit line using the linear least square outputted parameters and the continuous value of x=log(z)
+fity_sfr_z = fit_sfr_z[0]*fitx + fit_sfr_z[1]
+# Print the best fit equation to console
+print(f"log(SFR) = {fit_sfr_z[0]}*log(z) + {fit_sfr_z[1]}")
 
-ax.plot(fitx,fity, color='firebrick', linewidth=1, label="Fit Line")
+# Plot the best fit line
+ax.plot(fitx,fity_sfr_z, color='firebrick', linewidth=1, label="Fit Line")
 
+# Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
 plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
 plt.legend(loc="lower right")
 
+
+#%%
+
+""" 
+NOTE: This section is unfinished
+"""
+# Create figure - 3D plot of all three variables
+fig = plt.figure()
+ax = fig.add_subplot(projection="3d")
+
+# Plot scatter plot of x=log(lum_xray), y=log(SFR), z=log(z) with redshift determining point colour
+scatter = ax.scatter(log_lum_xray, log_sfr, log_z, marker='x', label="Data", c=z, cmap=clrs)
+
+# Plot a colourbar to show how the datapoint colour changes depending on redshift
+clrbar = plt.colorbar(scatter,location='left')
+clrbar.set_label("Redshift")
+
+# Find the 3D best fit line equation using the parameters from the three 2D best fit lines
+fit = sim_solve_3d(a=fit_sfr_Lagn[0], b=fit_sfr_Lagn[1], c=fit_Lagn_z[0], d=fit_Lagn_z[1], e=fit_sfr_z[0], f=fit_sfr_z[1])
+# Create an array of dummy x-axis and z-axis values
+fitx = np.linspace(min(log_sfr),max(log_sfr),dmy_len)
+fitz = np.linspace(min(log_z),max(log_z),dmy_len)
+# Calculate the the best fit line using the linear least square outputted parameters and the continuous value of x=log(z)
+fity = (fity_sfr_Lagn + fity_sfr_z + fity_Lagn_z)/3
+# Print the best fit equation to console
+
+# Plot the best fit line
+ax.plot(fitx, fity, fitz, color='firebrick', linewidth=1, label="Fit Line")
+
+# Label axes and plot legend
+ax.set_xlabel("$\log($AGN X-Ray Luminosity, $L_{\odot})$", labelpad=10)
+ax.set_ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$", labelpad=10)
+ax.set_zlabel("$\log($Redshift$)$", labelpad=10)
+plt.legend()
+
+
+
+
+# Show figures
 plt.show()
