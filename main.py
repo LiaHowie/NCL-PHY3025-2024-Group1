@@ -250,5 +250,5 @@ plt.legend()
 
 
 
-# Show figures
+# Show figures - this stalls the code so has to be ran last
 plt.show()
