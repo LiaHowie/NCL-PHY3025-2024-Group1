@@ -25,6 +25,7 @@ df_comp = pd.read_csv('Compiled_AGN_dataset.csv')
 
 # The below section of code matches coordinates from the SDSS data and our compiled dataset
 # See "dataset_processing.py" for more detailed commenting on how this works
+# I don't actually know what equinox the SDSS dataset it using, I just guessed J2000
 sdss_coords = coord.SkyCoord(ra=df['RA']*u.deg, dec=df['DEC']*u.deg, unit=u.deg, equinox="J2000")
 agn_coords = coord.SkyCoord(ra=df_comp['XRAY:RA']*u.deg, dec=df_comp['XRAY:DEC']*u.deg, unit=u.deg, equinox="J2000")
 idx, sep2d, dist3d = coord.match_coordinates_sky(agn_coords, sdss_coords)
