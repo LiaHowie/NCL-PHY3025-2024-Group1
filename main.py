@@ -1,7 +1,7 @@
 # Main code for data analysis -- Lia
 import pandas as pd
 import numpy as np
-import scienceplots
+import scienceplots # requires some form of latex to be installed on your machine - makes graphs look nicer :)
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from astropy import coordinates as coord
@@ -80,7 +80,7 @@ df.dropna(subset=['IR:FNU_100'],inplace=True)
 df.dropna(subset=['IR:FNU_60'],inplace=True)
 df.dropna(subset=['XRAY:FLUX'],inplace=True)
 
-# Remove redshifts below 0.05 to avoid K-corrections
+# Remove redshifts above 0.05 to avoid K-corrections
 df.drop(df[df['XRAY:REDSHIFT'] > 0.05].index, inplace=True)
 
 print(df)
@@ -89,29 +89,61 @@ print(df)
 z = df['XRAY:REDSHIFT'].to_numpy() * cu.redshift
 d = z.to(u.centimeter, cu.redshift_distance(WMAP9, kind="comoving"))
 
-# Converting from specific (nominal) fluxes [Jy] to normal flux [W m^-2] (Helou, 1988 [pg 21 (171)])
+# Grab percentage relative flux density uncertainties from IRAS
+f100_unc = df['IR:RELUNC_100']/100
+f60_unc = df['IR:RELUNC_60']/100
+# Calculate the upper and lower bounds of the flux densities using these errors
+f100_err_up = df['IR:FNU_100'] + (df['IR:FNU_100']*f100_unc)
+f100_err_lo = df['IR:FNU_100'] - (df['IR:FNU_100']*f100_unc)
+f60_err_up = df['IR:FNU_60'] + (df['IR:FNU_60']*f60_unc)
+f60_err_lo = df['IR:FNU_60'] - (df['IR:FNU_60']*f60_unc)
+
+
+# Converting from specific (nominal) fluxes [Jy] to normal flux [W m^-2] (Helou, 1988 [pg 21 (171)]) - also doing so for the errors
 f100 = df['IR:FNU_100']*(1.00*10**(-14))
 f60 = df['IR:FNU_60']*(2.58*10**(-14))
-# Calculate total FIR flux (Helou, 1988 [pg 19 (169)])
+f100_err_up = f100_err_up*(1.00*10**(-14))
+f100_err_lo = f100_err_lo*(1.00*10**(-14))
+f60_err_up = f60_err_up*(2.58*10**(-14))
+f60_err_lo = f60_err_lo*(2.58*10**(-14))
+# Calculate total FIR flux (Helou, 1988 [pg 19 (169)]) - also doing so for the errors
 FIR = 2.16*(f100 + f60)
-# Convert flux from W m^-2 to erg s^-1 cm^-2 (1 W = 10^7 erg s^-1, 1m^2 = 10^4 cm^2)
+FIR_err_up = 2.16*(f100_err_up + f60_err_up)
+FIR_err_lo = 2.16*(f100_err_lo + f60_err_lo)
+# Convert flux from W m^-2 to erg s^-1 cm^-2 (1 W = 10^7 erg s^-1, 1m^2 = 10^4 cm^2) - also doing so for the errors
 FIR = FIR*1e7 * 1e-4
-# Using the distance, now find the IR luminosity
+FIR_err_up = FIR_err_up*1e7 * 1e-4
+FIR_err_lo = FIR_err_lo*1e7 * 1e-4
+# Using the distance, now find the IR luminosity - also doing so for the errors
 lum_fir = lum(FIR,d)
-# Calaculate Star Formation Rates in units of M_sol per year
+lum_fir_err_up = lum(FIR_err_up,d)
+lum_fir_err_lo = lum(FIR_err_lo,d)
+# Calaculate Star Formation Rates in units of M_sol per year - also doing so for the errors
 sfr = SFR(lum_fir)
+sfr_err_up = SFR(lum_fir_err_up)
+sfr_err_lo = SFR(lum_fir_err_lo)
 
-# Extract X-Ray flux from SWIFT BAT dataset, units of erg s^-1 cm^-2, and calculate the luminosity in erg s^-1
+# Extract X-Ray flux (and it's upper and lower bounds) from SWIFT BAT dataset, units of erg s^-1 cm^-2, and calculate the luminosity in erg s^-1
 lum_xray = lum(df['XRAY:FLUX'],d)
+lum_xray_err_up = lum(df['XRAY:FLUX_HI'],d)
+lum_xray_err_lo = lum(df['XRAY:FLUX_LO'],d)
 # Defining L_sol (luminosity of the sun) in erg s^-1
 L_sol = 3.846* 1e26 *1e7
 # Putting our calculated X-Ray luminosities in terms of L_sol
 lum_xray = lum_xray/L_sol
+lum_xray_err_up = lum_xray_err_up/L_sol
+lum_xray_err_lo = lum_xray_err_lo/L_sol
 
 # Logging SFR, X-Ray luminosity, and redshift as we will frequrntly be using logged values going forward
 log_sfr = np.log10(sfr)
 log_lum_xray = np.log10(lum_xray)
 log_z = np.log10(z)
+
+# Collect errors into a multidimensional arrays
+sfr_err = [sfr - sfr_err_lo, sfr_err_up - sfr]
+log_sfr_err = [log_sfr - np.log10(sfr_err_lo), np.log10(sfr_err_up) - log_sfr]
+lum_xray_err = [lum_xray - lum_xray_err_lo, lum_xray_err_up - lum_xray]
+log_lum_xray_err = [log_lum_xray - np.log10(lum_xray_err_lo), np.log10(lum_xray_err_up) - log_lum_xray]
 
 
 
@@ -134,7 +166,8 @@ dmy_len = 1000000
 fig, ax = plt.subplots()
 
 # Plot scatter plot of x=log(lum_xray), y=log(sfr) with redshift determining point colour
-scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", c=z, cmap=clrs)
+ax.errorbar(log_lum_xray, log_sfr, yerr=log_sfr_err, xerr=log_lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -150,7 +183,7 @@ fity_sfr_Lagn = fit_sfr_Lagn[0]*fitx + fit_sfr_Lagn[1]
 print(f"log(SFR) = {fit_sfr_Lagn[0]}*log(L_agn) + {fit_sfr_Lagn[1]}")
 
 # Plot the best fit line
-ax.plot(fitx,fity_sfr_Lagn, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity_sfr_Lagn, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("$\log($AGN X-Ray Luminosity, $L_{\odot})$")
@@ -165,7 +198,8 @@ print(f"R^2 = {R2(y=log_sfr, yfit=fit_sfr_Lagn[0]*log_lum_xray + fit_sfr_Lagn[1]
 fig, ax = plt.subplots()
 
 # Plot scatter plot of x=log(z), y=log(lum_xray) with log(SFR) determining point colour
-scatter = ax.scatter(log_z, log_lum_xray, marker='x', label="Data", c=log_sfr, cmap="viridis")
+ax.errorbar(log_z, log_lum_xray, yerr=log_lum_xray_err, ecolor='indianred', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(log_z, log_lum_xray, marker='x', label="Data", c=log_sfr, cmap="viridis", zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on log(SFR)
 clrbar = plt.colorbar(scatter)
@@ -181,7 +215,7 @@ fity_Lagn_z = fit_Lagn_z[0]*fitx + fit_Lagn_z[1]
 print(f"log(L_agn) = {fit_Lagn_z[0]}*log(z) + {fit_Lagn_z[1]}")
 
 # Plot the best fit line
-ax.plot(fitx,fity_Lagn_z, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity_Lagn_z, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
@@ -196,7 +230,8 @@ print(f"R^2 = {R2(y=log_lum_xray, yfit=fit_Lagn_z[0]*log_z + fit_Lagn_z[1])}")
 fig, ax = plt.subplots()
 
 # Plot scatter plot of x=log(z), y=log(SFR) with log(lum_xray) determining point colour
-scatter = ax.scatter(log_z, log_sfr, marker='x', label="Data", c=log_lum_xray, cmap="viridis")
+ax.errorbar(log_z, log_sfr, yerr=log_sfr_err, ecolor='indianred', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(log_z, log_sfr, marker='x', label="Data", c=log_lum_xray, cmap="viridis", zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on log(lum_xray)
 clrbar = plt.colorbar(scatter)
@@ -212,7 +247,7 @@ fity_sfr_z = fit_sfr_z[0]*fitx + fit_sfr_z[1]
 print(f"log(SFR) = {fit_sfr_z[0]}*log(z) + {fit_sfr_z[1]}")
 
 # Plot the best fit line
-ax.plot(fitx,fity_sfr_z, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity_sfr_z, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
@@ -227,7 +262,8 @@ print(f"R^2 = {R2(y=log_sfr, yfit=fit_sfr_z[0]*log_z + fit_sfr_z[1])}")
 fig, ax = plt.subplots()
 
 # Plot scatter plot of lum_xray, sfr with redshift determining point colour
-scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs)
+ax.errorbar(lum_xray, sfr, yerr=sfr_err, xerr=lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -239,7 +275,7 @@ fitx = np.linspace(np.min(lum_xray),np.max(lum_xray),dmy_len)
 fity_sfr_Lagn_lin = (fitx**(fit_sfr_Lagn[0]))*(10**(fit_sfr_Lagn[1]))
 
 # Plot the best fit line
-ax.plot(fitx,fity_sfr_Lagn_lin, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity_sfr_Lagn_lin, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("AGN X-Ray Luminosity, $L_{\odot}$")
@@ -250,7 +286,8 @@ plt.legend()
 fig, ax = plt.subplots()
 
 # Plot scatter plot of lum_xray, sfr with redshift determining point colour
-scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs)
+ax.errorbar(lum_xray, sfr, yerr=sfr_err, xerr=lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -262,7 +299,7 @@ fitx = np.linspace(np.min(lum_xray),np.max(lum_xray),dmy_len)
 fity_sfr_Lagn_lin = (fitx**(fit_sfr_Lagn[0]))*(10**(fit_sfr_Lagn[1]))
 
 # Plot the best fit line
-ax.plot(fitx,fity_sfr_Lagn_lin, color='firebrick', linewidth=1, label="Fit Line")
+ax.plot(fitx,fity_sfr_Lagn_lin, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("AGN X-Ray Luminosity, $L_{\odot}$")
@@ -270,6 +307,32 @@ plt.ylabel("SFR, $M_{\odot}\cdot$yr$^{-1}$")
 plt.ylim(0,36)
 plt.legend()
 
+
+# Create figure - SFR vs lum_xray - No best fit or redshift
+fig, ax = plt.subplots()
+
+# Plot scatter plot of lum_xray, sfr with redshift determining point colour
+ax.errorbar(lum_xray, sfr, yerr=sfr_err, xerr=lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", zorder=2)
+
+# Label axes and plot legend
+plt.xlabel("AGN X-Ray Luminosity, $L_{\odot}$")
+plt.ylabel("SFR, $M_{\odot}\cdot$yr$^{-1}$")
+plt.legend()
+
+
+
+# Create figure - log(SFR) vs log(lum_xray) - no redshift or best fit
+fig, ax = plt.subplots()
+
+# Plot scatter plot of x=log(lum_xray), y=log(sfr) with redshift determining point colour
+ax.errorbar(log_lum_xray, log_sfr, yerr=log_sfr_err, xerr=log_lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
+scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", zorder=2)
+
+# Label axes and plot legend
+plt.xlabel("$\log($AGN X-Ray Luminosity, $L_{\odot})$")
+plt.ylabel("$\log($SFR, $M_{\odot}\cdot$yr$^{-1})$")
+plt.legend()
 
 
 #%%

@@ -1,6 +1,6 @@
 # Dataset processing -- Lia
 # Combining the SWIFT BAT dataset and IRAS dataset by filtering out non-AGN sources in SWIFT BAT,
-# then coressmatching RA and DEC values with the IRAS dataset
+# then cross-matching RA and DEC values with the IRAS dataset
 import pandas as pd
 from astropy import coordinates as coord
 from astropy import units as u
