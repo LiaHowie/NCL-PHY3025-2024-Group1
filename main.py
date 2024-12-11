@@ -124,9 +124,9 @@ sfr_err_up = SFR(lum_fir_err_up)
 sfr_err_lo = SFR(lum_fir_err_lo)
 
 # Extract X-Ray flux (and it's upper and lower bounds) from SWIFT BAT dataset, units of erg s^-1 cm^-2, and calculate the luminosity in erg s^-1
-lum_xray = lum(df['XRAY:FLUX'],d)
-lum_xray_err_up = lum(df['XRAY:FLUX_HI'],d)
-lum_xray_err_lo = lum(df['XRAY:FLUX_LO'],d)
+lum_xray = lum(df['XRAY:FLUX']*(1e-12),d)
+lum_xray_err_up = lum(df['XRAY:FLUX_HI']*(1e-12),d)
+lum_xray_err_lo = lum(df['XRAY:FLUX_LO']*(1e-12),d)
 # Defining L_sol (luminosity of the sun) in erg s^-1
 L_sol = 3.846* 1e26 *1e7
 # Putting our calculated X-Ray luminosities in terms of L_sol
@@ -145,6 +145,25 @@ log_sfr_err = [log_sfr - np.log10(sfr_err_lo), np.log10(sfr_err_up) - log_sfr]
 lum_xray_err = [lum_xray - lum_xray_err_lo, lum_xray_err_up - lum_xray]
 log_lum_xray_err = [log_lum_xray - np.log10(lum_xray_err_lo), np.log10(lum_xray_err_up) - log_lum_xray]
 
+# Calculating the flux limit for both X-Ray and FIR
+min_xray_flux = min(df['XRAY:FLUX']*(1e-12))
+min_f100 = min(df['IR:FNU_100']*(1.00*10**(-14)))
+min_f60 = min(df['IR:FNU_60']*(2.58*10**(-14)))
+min_FIR = 2.16*(min_f100 + min_f60)
+min_FIR = min_FIR*1e7 * 1e-4
+
+# Creating a dummy array of redshift values
+z_array = np.linspace(min(z),0.05,10000)* cu.redshift
+# Use the dummy array of redshifts to calculate a range of distances
+d_array = z_array.to(u.centimeter, cu.redshift_distance(WMAP9, kind="comoving"))
+
+# Calculate the X-Ray luminosity limit using the X-Ray flux limit and the dummy array of distances
+L_xray_min = lum(min_xray_flux,d_array)/L_sol
+
+# Calculate the SFR limit using the FIR flux limit and the dummy array of distances
+min_FIR_array = np.full(10000,min_FIR)
+min_lum_FIR = lum(min_FIR_array,d_array)
+min_SFR = SFR(min_lum_FIR)
 
 
 #%%
@@ -167,7 +186,7 @@ fig, ax = plt.subplots()
 
 # Plot scatter plot of x=log(lum_xray), y=log(sfr) with redshift determining point colour
 ax.errorbar(log_lum_xray, log_sfr, yerr=log_sfr_err, xerr=log_lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
-scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
+scatter = ax.scatter(log_lum_xray, log_sfr, marker='x', label="Data", c=z, cmap='turbo', zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -216,6 +235,8 @@ print(f"log(L_agn) = {fit_Lagn_z[0]}*log(z) + {fit_Lagn_z[1]}")
 
 # Plot the best fit line
 ax.plot(fitx,fity_Lagn_z, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
+# Plot the flux limit
+ax.plot(np.log10(z_array), np.log10(L_xray_min), linewidth=1, label="Flux Limit", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
@@ -248,6 +269,8 @@ print(f"log(SFR) = {fit_sfr_z[0]}*log(z) + {fit_sfr_z[1]}")
 
 # Plot the best fit line
 ax.plot(fitx,fity_sfr_z, color='firebrick', linewidth=1, label="Fit Line", zorder=3)
+# Plot the flux limit
+ax.plot(np.log10(z_array), np.log10(min_SFR), linewidth=1, label="Flux Limit", zorder=3)
 
 # Label axes and plot legend
 plt.xlabel("$\log($Redshift$)$")
@@ -263,7 +286,7 @@ fig, ax = plt.subplots()
 
 # Plot scatter plot of lum_xray, sfr with redshift determining point colour
 ax.errorbar(lum_xray, sfr, yerr=sfr_err, xerr=lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
-scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
+scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap='turbo', zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -287,7 +310,7 @@ fig, ax = plt.subplots()
 
 # Plot scatter plot of lum_xray, sfr with redshift determining point colour
 ax.errorbar(lum_xray, sfr, yerr=sfr_err, xerr=lum_xray_err, ecolor='teal', solid_capstyle='projecting', capsize=2, fmt='none', zorder=1, label="Uncertainty")
-scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap=clrs, zorder=2)
+scatter = ax.scatter(lum_xray, sfr, marker='x', label="Data", c=z, cmap='turbo', zorder=2)
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter)
@@ -351,7 +374,7 @@ fig = plt.figure()
 ax = fig.add_subplot(projection="3d")
 
 # Plot scatter plot of x=log(lum_xray), y=log(SFR), z=log(z) with redshift determining point colour
-scatter = ax.scatter(log_lum_xray, log_sfr, log_z, marker='x', label="Data", c=z, cmap=clrs)
+scatter = ax.scatter(log_lum_xray, log_sfr, log_z, marker='x', label="Data", c=z, cmap='turbo')
 
 # Plot a colourbar to show how the datapoint colour changes depending on redshift
 clrbar = plt.colorbar(scatter,location='left')
